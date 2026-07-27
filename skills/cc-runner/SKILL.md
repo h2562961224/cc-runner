@@ -42,7 +42,7 @@ claude --version   # Claude Code CLI 必须已安装并登录过（runner 会调
 
 ```bash
 npm i -g superun-cli   # 管理侧：连项目、建任务、查记录（命令为 superun）
-npm i -g cc-runner     # 执行侧：本地守护进程（命令为 cc-runner，包名以最终发布为准）
+npm i -g @h2562961224/cc-runner   # 执行侧：本地守护进程（命令为 cc-runner）
 ```
 
 ---

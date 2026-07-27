@@ -28,7 +28,7 @@ runner **不做任何本地自主调度**——不算 cron、不离线自跑。*
 ## 安装(用户视角,一次粘贴)
 
 ```bash
-npm i -g cc-runner
+npm i -g @h2562961224/cc-runner
 cc-runner init --api https://<your-project>.example.com/functions/v1/runner-api --token <X-Runner-Token> --workdir ~/your-project
 cc-runner install        # 挂载 launchd:开机自启、crash 自动拉起
 ```
