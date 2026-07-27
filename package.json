@@ -1,0 +1,17 @@
+{
+  "name": "cc-runner",
+  "version": "0.1.0",
+  "description": "云端下发、本地执行的 Claude Code 任务守护进程(pull 模型,零依赖)",
+  "bin": {
+    "cc-runner": "bin/cli.js"
+  },
+  "files": [
+    "bin/cli.js",
+    "runner.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED"
+}
