@@ -1,12 +1,13 @@
 {
   "name": "@h2562961224/cc-runner",
-  "version": "0.1.0",
-  "description": "云端下发、本地执行的 Claude Code 任务守护进程(纯中心化 pull 模型,零依赖)",
+  "version": "0.2.0",
+  "description": "云端下发、本地执行的 Claude Code 任务守护进程(纯中心化 pull 模型,零依赖,支持一个进程挂多组 token/工作区)",
   "bin": {
     "cc-runner": "bin/cli.js"
   },
   "files": [
     "bin/cli.js",
+    "config.js",
     "runner.js",
     "README.md",
     "skills/"

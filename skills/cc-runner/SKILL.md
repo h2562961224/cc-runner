@@ -94,6 +94,18 @@ cc-runner status     # 看是否已同步、launchd 是否挂载
 
 这台机器的 runner 身份由 token 决定（不再手填 `--runner`）。首次心跳后，它会自动出现在控制台「看板」。想在多台机器跑，就在控制台各建一个 runner、拿各自的 token，在每台机器 `init`。
 
+**同一台机器要接多个 workspace**（不同组织、公私分开）时，不用起多个进程 —— `cc-runner add` 再挂一组 token 和白名单即可：
+
+```bash
+cc-runner add --name <账号名> --api <该 workspace 的 runner-api 地址> --token <该 workspace 的 token> --workdir ~/对应项目目录
+cc-runner list                          # 看所有账号
+cc-runner remove --name <账号名>        # 摘掉（加 --purge 连数据一起删）
+```
+
+每个账号独立轮询、独立队列、独立数据目录（`~/.cc-runner/data/<账号名>/`），**白名单按账号各管各的** —— 这是账号之间唯一的隔离边界，加 workdir 时同样要和用户确认。跨账号的 claude 并发受 config 顶层 `max_concurrent_jobs` 限制（默认 1，串行）。改完配置要重启守护进程才生效（`cc-runner install` 会先卸载再挂载）。
+
+> 注意：多 token 隔离的是**平台侧身份**，不隔离本地 Claude 登录态 —— 所有任务都由同一份 `claude` 凭证执行。
+
 验证心跳到了云端：
 
 ```bash
@@ -209,7 +221,7 @@ tail -f ~/.cc-runner/logs/daemon.log    # 守护进程实时日志
 ## 运维与排查
 
 - **runner 显示离线**（看板灰点 / `last_seen_at` 很旧）：`cc-runner status` 看 launchd 是否挂载；`tail ~/.cc-runner/logs/daemon.log` 看报错。断网期间领不到新任务（纯中心化，不本地自跑）；已跑完待回填的结果攒在 outbox，恢复后自动补传。
-- **任务 `rejected`**：workdir 不在本地白名单。要么改触发器/定时的 `workdir`，要么 `cc-runner init` 时把目录加进 `--workdir`（可重复传多个）。
+- **任务 `rejected`**：workdir 不在**该账号**的本地白名单。要么改触发器/定时的 `workdir`，要么在 `cc-runner init` / `add` 时把目录加进 `--workdir`（可重复传多个）；`cc-runner list` 能看到每个账号当前的白名单。
 - **webhook 打过去没反应**：确认地址带对了 `?token=<secret>`；`secret` 不匹配返回 401，`slug` 不存在返回 404。
 - **卸载**：`cc-runner uninstall`（配置和数据保留在 `~/.cc-runner`，需要再手删）。
 

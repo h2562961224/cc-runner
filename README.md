@@ -35,6 +35,42 @@ cc-runner install        # 挂载 launchd:开机自启、crash 自动拉起
 
 验证:`cc-runner status`;日志 `tail -f ~/.cc-runner/logs/daemon.log`。
 
+## 多账号:一个进程挂多组 token / 工作区
+
+一台机器要同时接几个 workspace(不同组织、不同项目、公私分开)时,不用起多个进程 —— `add` 就行:
+
+```bash
+cc-runner add --name acme     --api https://a.example.com/functions/v1/runner-api --token <tokenA> --workdir ~/work/acme
+cc-runner add --name personal --api https://b.example.com/functions/v1/runner-api --token <tokenB> --workdir ~/side
+cc-runner list        # 看所有账号
+cc-runner remove --name acme [--purge]
+```
+
+每个账号是一个**独立实例**:独立轮询、独立队列、独立数据目录 `~/.cc-runner/data/<账号名>/`。所以
+
+- **去重表不串**:两个服务器各发一条 `id=1` 的 job,`dedup_key` 都是 `job:1`,但 `done` 表按账号分家,不会被误吞。
+- **白名单按账号收窄**:`allowed_workdirs` 挂在账号上 —— 多账号场景下这是账号之间**唯一的隔离边界**,acme 的任务落不进 personal 的目录。
+- **并发有闸**:账号内串行,跨账号再过一层进程级 `max_concurrent_jobs`(默认 1),免得 N 个账号同时把机器跑满。要放开就在 config 顶层调大。
+
+配置形态(顶层字段是所有账号的默认值,账号里写同名字段即覆盖):
+
+```jsonc
+{
+  "max_concurrent_jobs": 1,
+  "poll_interval_seconds": 30,          // 公共默认
+  "accounts": [
+    { "name": "acme", "api_url": "...", "runner_token": "...", "allowed_workdirs": ["~/work/acme"] },
+    { "name": "personal", "api_url": "...", "runner_token": "...", "allowed_workdirs": ["~/side"],
+      "poll_interval_seconds": 60,      // 覆盖公共默认
+      "env": { "FOO": "bar" } }         // 透传给 claude 子进程的环境变量
+  ]
+}
+```
+
+旧版单账号扁平配置(顶层直接写 `api_url`/`runner_token`)照常能读,首次启动会自动把 `data/state.json`、`data/outbox/` 并进 `data/default/`,待补传的上报和 done 表都不丢。
+
+> ⚠️ 多 token 隔离的是**平台侧身份**(哪个 workspace 的队列、结果回填到哪),**不隔离本地 Claude 登录态** —— 所有任务都由同一个 `claude` 二进制、同一份凭证执行。要按账号分开计费/换号,用账号的 `env` 字段透传对应的环境变量。
+
 ## 协议契约(runner-api,全部 POST + `X-Runner-Token`)
 
 | 动作 | 调用 | 返回 |
@@ -54,24 +90,25 @@ cc-runner install        # 挂载 launchd:开机自启、crash 自动拉起
 ## 安全边界
 
 - 本地只有出站 HTTPS,不监听端口。
-- 云端建任务 ≈ 在本机执行代码:`allowed_workdirs` 白名单**由本地 config 说了算**,云端下发的 workdir 不在白名单内直接 `rejected`,不执行。
+- 云端建任务 ≈ 在本机执行代码:`allowed_workdirs` 白名单**由本地 config 说了算**,云端下发的 workdir 不在白名单内直接 `rejected`,不执行。白名单**按账号独立**,多账号之间靠它隔离。
 - `config.json` 含 runner token,权限 0600;默认 `--dangerously-skip-permissions` 跑 cc,介意就改 `claude_args`(如 `--permission-mode acceptEdits`)。
 
 ## 目录
 
 ```
 ~/.cc-runner/
-├── config.json          init 生成(0600)
-├── logs/daemon.log      launchd 重定向
+├── config.json              init/add 生成(0600)
+├── logs/daemon.log          launchd 重定向
 └── data/
-    ├── state.json       定时任务版本+缓存+done 表+outbox 序号
-    ├── outbox/          待补传的 /report(可重放)
-    └── transcripts/     每次执行的 cc 原始输出(按 run_id)
+    └── <账号名>/            每个账号一套,互不干扰
+        ├── state.json       定时任务版本+缓存+done 表+outbox 序号
+        ├── outbox/          待补传的 /report(可重放)
+        └── transcripts/     每次执行的 cc 原始输出(按 run_id)
 ```
 
 ## 已知取舍(MVP)
 
 - 轮询间隔即指令延迟(默认 30s);想更低做 long-poll,协议不用改。
 - cron 回看窗口 48h;`catchup_latest` 停机超 48h 不补。
-- 串行执行,同刻多任务排队;超时 SIGKILL。
+- 账号内串行,跨账号受 `max_concurrent_jobs`(默认 1)限流,同刻多任务排队;超时 SIGKILL。
 - 日志不轮转,大了自己清。
